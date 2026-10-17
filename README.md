@@ -70,4 +70,12 @@ npm audit --omit=peer
 
 自动测试覆盖认证/CSRF、目标地址约束、设备隔离、HTTP 2 MiB 上传、流式响应、WebSocket 握手前消息排队、断线离线提示。另用隔离 DSH `0.2.1-rc.2` 验证完整界面与真实终端 `echo DSH_REMOTE_COMMAND_OK` 回显；第二个独立临时 profile 通过额外 patch 直接加载本插件源码，成功注册 `adapter-pc`。这属于隔离联调，没有向日常 DSH 安装插件或复用其账号。
 
-安卓 APK 已构建并通过 Lint；尚无已连接安卓设备，未宣称真机验收。公网部署与手机蜂窝网络验收应记录为单独步骤。
+安卓 APK 已构建并通过 Lint；安卓 16 真机已安装、打开公网 HTTPS 页面并成功登录。部署后的 HTTPS 鉴权、真实 Harness HTML 与 `remoteAccess/follow` WebSocket baseline 已通过公网往返验证。尚未验证手机蜂窝网络切换和手机端命令执行。
+
+公网联调可在独立测试 Harness 启动后运行：
+
+```sh
+node tools/verify-deployed.mjs .private/computer.json .private/mobile-key.txt /path/to/isolated-harness.log
+```
+
+它临时连接测试设备，验证结束即关闭，不向控制台打印密钥或启动 token。
