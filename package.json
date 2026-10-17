@@ -1,19 +1,21 @@
 {
   "name": "dsh-remote",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Authenticated outbound relay for the DeepSeek Harness web interface",
   "type": "module",
   "license": "MIT",
   "main": "src/node.js",
   "exports": {
     ".": "./src/node.js",
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./client": "./src/client.js"
   },
   "engines": {
     "node": ">=22",
     "dsh": ">=0.2.1-rc.2 <0.3.0"
   },
   "dsh": {
+    "client": {"platform":"web","external":["react"],"inject":["@deepseek-ai/dsh-client-connection","@deepseek-ai/dsh-client-ui-renderer","@deepseek-ai/dsh-client-ui-plugin-manager"]},
     "bundle": {
       "patch": "./cordis.patch.yml"
     }

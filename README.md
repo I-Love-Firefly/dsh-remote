@@ -14,7 +14,8 @@ Android / browser ── HTTPS + WebSocket ── relay ── outbound WSS ─�
 - 服务端：`relay/server.mjs`，监听 loopback，置于现有 HTTPS 反向代理之后。
 - Node.js 22+；验证基线为 DSH `0.2.1-rc.2`。未来版本的 API 仍需重新验证。
 - 安卓独立工程与 APK 单独交付，Android 8.0+，默认仅允许 HTTPS。
-- 插件源码先上传 GitHub；没有安装至用户日常 DSH。
+- 原生插件设置表单与实时连接状态；电脑连接密钥使用 Harness 的 secret 字段，读取配置时结构化脱敏。
+- 默认在电脑端跳过远程开屏主题脚本，避免将内嵌动画上传中转；电脑本地主题不受影响。
 
 ## 配对与服务端
 
@@ -34,15 +35,26 @@ docker logs --tail 20 dsh-remote
 curl https://your-domain.example/dshremote/health
 ```
 
-## 电脑插件（由用户选择安装时机）
+## 电脑插件与设置页
 
-使用 Harness 当前 profile 的插件管理器添加本仓库或 npm 打包文件；不要把安装目录的文件复制等同于插件已经加载。插件包声明 `dsh.bundle.patch`，由 Harness 加载 `cordis.patch.yml`。在启动 Harness 的进程环境设置：
+使用 Harness 当前 profile 的插件管理器添加本仓库或 npm 打包文件。插件包声明 `dsh.bundle.patch`，由 Harness 加载 `cordis.patch.yml`。
+
+打开 **插件 → dsh-remote → 配置**：连接状态卡会显示状态、电脑名称、手机访问地址与密钥是否已配置；下方原生配置表单可编辑：
+
+- `enabled`：启用或暂停连接。
+- `relayUrl`：自己的 HTTPS/WSS 中转地址。
+- `deviceId`：电脑名称，使用字母、数字、下划线或短横线。
+- `bridgeKey`：电脑连接密钥，使用遮蔽输入框；已保存的密钥不会回传明文，不要填成手机登录密钥。
+- `skipRemoteAnimation`：默认开启，在电脑端拦截 `dsh-theme-firefly` 的动画主题模块，远程端使用默认外观；动画数据不经过服务器。
+- `configFile`：兼容旧版配置文件的高级选项；直接填写上述配置时留空。
+
+保存配置会自动重新连接，无需修改环境变量。配置只保存在用户本机的 Harness profile 中，包含密钥的 profile 和配对文件不得上传 GitHub。旧版环境变量仍可使用：
 
 ```powershell
 $env:DSH_REMOTE_CONFIG = 'C:\private\dsh-remote\computer.json'
 ```
 
-桌面程序需要继承该环境变量后重新启动；本交付不修改用户级环境变量、不自动重启当前 DSH。未设置配置时插件保持空闲。配置变动后需重载插件或重启 Harness。
+只有选择环境变量兼容方式时，桌面程序才需要继承变量后重新启动。尚未填写配置时，设置页明确显示缺失项。
 
 插件从当前进程的 `connection.authenticatedUrl()` 获取认证地址，向 loopback 交换 cookie；该 token 和 cookie 不发送给手机。HTTP 与 WebSocket 的 Host/Origin 会恢复成电脑本机地址。插件卸载会关闭 tunnel、在途请求和重连定时器。
 
@@ -60,6 +72,7 @@ $env:DSH_REMOTE_CONFIG = 'C:\private\dsh-remote\computer.json'
 - 一台电脑一个 device ID；已有 ID 不被新连接抢占。当前版本为同一所有者的设备设计，不提供多用户隔离、设备授权列表或独立审计日志。
 - 轮换手机密钥时同时更换 session key 并重启 relay，以撤销旧登录。退出登录只清除当前客户端 cookie。
 - 不支持访问电脑的 `localhost` 网页、远程桌面屏幕或独立于 Harness 的任意 shell 接口。
+- 远程动画跳过在电脑端完成；混合脚本包只移除动画模块，其他模块继续加载。传输层支持大响应的窗口流控，避免慢客户端无限堆积缓冲。
 
 ## 验证
 

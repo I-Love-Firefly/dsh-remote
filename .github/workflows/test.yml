@@ -11,6 +11,6 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-      - run: npm ci --omit=peer --ignore-scripts
+      - run: npm ci --ignore-scripts
       - run: npm test
       - run: npm audit --omit=peer --audit-level=high

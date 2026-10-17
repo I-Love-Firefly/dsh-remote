@@ -20,6 +20,7 @@ test('authenticated relay: HTTP, streaming upload, streaming response, WebSocket
     assert.equal(req.headers.origin,localOrigin);
     if(req.url==='/stream'){res.writeHead(200,{'content-type':'text/event-stream'});res.write('first\n');setTimeout(()=>res.end('second\n'),150);return;}
     if(req.url==='/upload'){const hash=createHash('sha256');for await(const chunk of req)hash.update(chunk);return res.end(hash.digest('hex'));}
+    if(req.url==='/large'){res.writeHead(200);for(let i=0;i<640;i++)if(!res.write(Buffer.alloc(32768,65)))await once(res,'drain');return res.end();}
     res.writeHead(200,{'content-type':'application/json','set-cookie':'must-not-leak=true'});
     res.end(JSON.stringify({url:req.url,authorization:req.headers.authorization??null}));
   });
@@ -53,6 +54,13 @@ test('authenticated relay: HTTP, streaming upload, streaming response, WebSocket
   const stream=await call('/device/pc/stream',{headers:{cookie}}),reader=stream.body.getReader();
   assert.equal(Buffer.from((await reader.read()).value).toString(),'first\n');
   assert.equal(Buffer.from((await reader.read()).value).toString(),'second\n');
+  const large=await new Promise((resolve,reject)=>{
+    http.get(origin+base+'/device/pc/large',{headers:{cookie}},response=>{
+      let length=0;const hash=createHash('sha256');response.pause();setTimeout(()=>response.resume(),250);
+      response.on('data',chunk=>{length+=chunk.length;hash.update(chunk);});response.on('end',()=>resolve({length,hash:hash.digest('hex')}));response.on('error',reject);
+    }).on('error',reject);
+  });
+  assert.equal(large.length,20*1024*1024);assert.equal(large.hash,createHash('sha256').update(Buffer.alloc(20*1024*1024,65)).digest('hex'));
   const ws=new WebSocket(origin.replace('http:','ws:')+base+'/device/pc/api',{headers:{cookie,origin}});
   await once(ws,'open');const next=once(ws,'message');ws.send('immediate-before-upstream-ready');
   assert.equal(String((await next)[0]),'immediate-before-upstream-ready');ws.close();await once(ws,'close');

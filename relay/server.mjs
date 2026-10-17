@@ -35,7 +35,7 @@ export function createRelay({ bridgeKey, mobileKey, publicUrl, sessionKey = rand
     res.setHeader('x-content-type-options','nosniff');res.setHeader('referrer-policy','same-origin');
     try {
       const u=new URL(req.url,'http://relay.local');
-      if (u.pathname===base+'/health') return json(res,200,{service:'dsh-remote',version:'0.1.0'});
+      if (u.pathname===base+'/health') return json(res,200,{service:'dsh-remote',version:'0.2.0'});
       if (u.pathname===base+'/' && req.method==='GET') {
         res.writeHead(200,{'content-type':'text/html; charset=utf-8','cache-control':'no-store','content-security-policy':"default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'"});
         res.end(loginPage(base,hasSession(req),[...devices.keys()]));return;
@@ -68,7 +68,7 @@ export function createRelay({ bridgeKey, mobileKey, publicUrl, sessionKey = rand
       if(pending.size>=128)return json(res,503,{error:'Busy'});
       const id=randomUUID(); attach(id,{bridge,res,device:match[1]});
       res.on('close',()=>cancel(id));
-      send(bridge,{t:'http',id,path:match[2]+u.search,method:req.method,headers:cleanHeaders(req.headers),streaming:true});
+      send(bridge,{t:'http',id,path:match[2]+u.search,method:req.method,headers:cleanHeaders(req.headers),streaming:true,flow:true});
       let length=0;
       for await(const chunk of req){
         length+=chunk.length;if(length>MAX_BODY){cancel(id);return json(res,413,{error:'Upload exceeds 32 MiB'});}
@@ -107,7 +107,12 @@ export function createRelay({ bridgeKey, mobileKey, publicUrl, sessionKey = rand
               headers['cache-control']='no-store';
               entry.res.writeHead(f.status,headers);return;
             }
-            if(f.t==='data'&&entry.res){if(!entry.res.write(decode(f.data))&&entry.res.writableLength>MAX_BUFFER)entry.res.destroy();return;}
+            if(f.t==='data'&&entry.res){
+              const chunk=decode(f.data);
+              if(entry.res.write(chunk)){send(ws,{t:'http-ack',id:f.id,bytes:chunk.length});}
+              else{entry.ackBytes=(entry.ackBytes??0)+chunk.length;if(!entry.waitingDrain){entry.waitingDrain=true;entry.res.once('drain',()=>{const bytes=entry.ackBytes;entry.ackBytes=0;entry.waitingDrain=false;try{send(ws,{t:'http-ack',id:f.id,bytes});}catch{entry.res.destroy();}});}}
+              return;
+            }
             if(f.t==='end'){done(f.id)?.res?.end();return;}
             if(f.t==='error'){const old=done(f.id);if(old?.res){if(!old.res.headersSent)old.res.writeHead(502);old.res.end();}old?.ws?.close(1011);}
           }catch{ws.close(1008,'Invalid frame');}

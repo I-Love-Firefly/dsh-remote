@@ -4,3 +4,16 @@ node_modules/
 *.env
 !.env.example
 artifacts/
+server.env
+computer.json
+mobile-key.txt
+*.pem
+*.key
+*.pfx
+*.p12
+*.jks
+*.keystore
+*.apk
+*.zip
+*.tgz
+screenshots/
