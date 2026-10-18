@@ -8,7 +8,7 @@ import { createRelay } from '../relay/server.mjs';
 import { startTunnel } from '../src/tunnel.mjs';
 import { safePath } from '../src/protocol.mjs';
 
-const bridgeKey='b'.repeat(48),mobileKey='m'.repeat(48);
+const bridgeKey='b'.repeat(8),mobileKey='m'.repeat(48);
 const listen=server=>new Promise(resolve=>server.listen(0,'127.0.0.1',()=>resolve(server.address().port)));
 const waitFor=async check=>{for(let i=0;i<150;i++){if(check())return;await new Promise(r=>setTimeout(r,20));}throw new Error('Timed out');};
 
@@ -71,6 +71,8 @@ test('authenticated relay: HTTP, streaming upload, streaming response, WebSocket
 });
 
 test('configuration rejects insecure remote endpoints and unsafe target paths',()=>{
+  assert.throws(()=>startTunnel({relayUrl:'wss://example.com',bridgeKey:'1234567',deviceId:'pc',getLocalUrl:()=>''}));
+  assert.throws(()=>createRelay({bridgeKey:'1234567',mobileKey,publicUrl:'https://example.com/'}));
   for(const path of ['//evil.test/','http://evil.test','/x\\y','/x\r\n'])assert.throws(()=>safePath(path));
   assert.throws(()=>startTunnel({relayUrl:'ws://example.com',bridgeKey,deviceId:'pc',getLocalUrl:()=>''}));
   assert.throws(()=>createRelay({bridgeKey,mobileKey:bridgeKey,publicUrl:'https://example.com/'}));

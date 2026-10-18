@@ -18,7 +18,7 @@ window.__ModuleLoader__.load({id:'dsh-remote',factory:require=>{
     const change=(field,next)=>{dirty.current=true;setDraft(previous=>({...previous,[field]:next}));};
     async function save(event){
       event.preventDefault();setMessage('');
-      try{if(draft.enabled){const address=new URL(draft.relayUrl);if(!['https:','wss:'].includes(address.protocol)||address.username||address.password||address.search||address.hash)throw new Error();if(!/^[A-Za-z0-9_-]{1,64}$/.test(draft.deviceId))throw new Error();if(key&&key.trim().length<32)throw new Error();}}catch{setMessage('请检查服务器地址、电脑名称和连接密钥（至少 32 字符）');return;}
+      try{if(draft.enabled){const address=new URL(draft.relayUrl);if(!['https:','wss:'].includes(address.protocol)||address.username||address.password||address.search||address.hash)throw new Error();if(!/^[A-Za-z0-9_-]{1,64}$/.test(draft.deviceId))throw new Error();if(key&&key.trim().length<8)throw new Error();}}catch{setMessage('请检查服务器地址、电脑名称和连接密钥（至少 8 字符）');return;}
       setSaving(true);
       try{const ops=Object.entries(draft).map(([field,next])=>({op:'set',path:[field],value:typeof next==='string'?next.trim():next}));if(key.trim())ops.push({op:'set',path:['bridgeKey'],value:key.trim()});const accepted=await form.mutate(ops);if(!accepted)throw new Error();dirty.current=false;setKey('');setMessage('配置已保存，连接状态会自动更新。');}catch{setMessage('保存失败，请刷新设置页后重试。');}finally{setSaving(false);}
     }

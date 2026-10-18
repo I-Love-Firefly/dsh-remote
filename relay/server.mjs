@@ -5,7 +5,8 @@ import { WebSocketServer } from 'ws';
 import { MAX_FRAME, MAX_BUFFER, MAX_BODY, validDevice, equal, send, encode, decode, cleanHeaders } from '../src/protocol.mjs';
 
 export function createRelay({ bridgeKey, mobileKey, publicUrl, sessionKey = randomBytes(32).toString('hex'), allowLocalTest = false }) {
-  for (const key of [bridgeKey, mobileKey, sessionKey]) if (typeof key !== 'string' || key.length < 32) throw new Error('All relay keys must contain at least 32 characters');
+  if (typeof bridgeKey !== 'string' || bridgeKey.length < 8) throw new Error('Bridge key must contain at least 8 characters');
+  for (const key of [mobileKey, sessionKey]) if (typeof key !== 'string' || key.length < 32) throw new Error('Mobile and session keys must contain at least 32 characters');
   if (equal(bridgeKey, mobileKey)) throw new Error('Bridge and mobile keys must be different');
   const root = new URL(publicUrl);
   if (root.protocol !== 'https:' && !(allowLocalTest && root.hostname === '127.0.0.1')) throw new Error('Public URL must use HTTPS');

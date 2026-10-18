@@ -7,7 +7,7 @@ import {remoteAssetPolicy} from './asset-policy.mjs';
 /** Only connects to the local Harness; relay messages cannot choose a host. */
 export function startTunnel(options) {
   const { relayUrl, bridgeKey, deviceId, getLocalUrl, onStatus = () => {}, allowInsecureLocalTest = false } = options;
-  if (!validDevice(deviceId) || typeof bridgeKey !== 'string' || bridgeKey.length < 32) throw new Error('Invalid device ID or bridge key');
+  if (!validDevice(deviceId) || typeof bridgeKey !== 'string' || bridgeKey.length < 8) throw new Error('Invalid device ID or bridge key');
   const remote = new URL(relayUrl);
   if (remote.protocol !== 'wss:' && !(allowInsecureLocalTest && remote.protocol === 'ws:' && ['127.0.0.1', 'localhost'].includes(remote.hostname))) throw new Error('Relay must use WSS');
   remote.pathname = remote.pathname.replace(/\/$/, '') + '/bridge';

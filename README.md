@@ -44,7 +44,7 @@ curl https://your-domain.example/dshremote/health
 - `enabled`：启用或暂停连接。
 - `relayUrl`：自己的 HTTPS/WSS 中转地址。
 - `deviceId`：电脑名称，使用字母、数字、下划线或短横线。
-- `bridgeKey`：电脑连接密钥，使用遮蔽输入框；已保存的密钥不会回传明文，不要填成手机登录密钥。
+- `bridgeKey`：电脑连接密钥，最低 8 字符，使用遮蔽输入框；已保存的密钥不会回传明文，不要填成手机登录密钥。
 - `skipRemoteAnimation`：默认开启，在电脑端拦截 `dsh-theme-firefly` 的动画主题模块，远程端使用默认外观；动画数据不经过服务器。
 - `configFile`：兼容旧版配置文件的高级选项；直接填写上述配置时留空。
 

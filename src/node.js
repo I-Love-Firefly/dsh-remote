@@ -40,7 +40,7 @@ export async function apply(ctx, config) {
         getLocalUrl:()=>{const server=ctx.webServer;return ctx.connection.authenticatedUrl(`${server.protocol}//127.0.0.1:${server.port}/`);},
         onStatus:state=>{if(!disposed&&own===generation){status.state=state;ctx.logger.info(`Remote relay: ${state}`);}},
       });
-    }catch{status.state='configuration-error';status.issue='配置无效：请使用 WSS/HTTPS 地址、有效电脑名称和至少 32 字符的电脑连接密钥';}
+    }catch{status.state='configuration-error';status.issue='配置无效：请使用 WSS/HTTPS 地址、有效电脑名称和至少 8 字符的电脑连接密钥';}
   }
   ctx.effect(()=>ctx.connection.rpc.handle('/dsh-remote',async endpoint=>endpoint==='status'
     ?{ok:true,value:{...status}}
