@@ -1,7 +1,7 @@
 /* Browser module registered using the Harness client-module contract; React stays host-owned. */
 window.__ModuleLoader__.load({id:'dsh-remote',factory:require=>{
   const React=require('react'),h=React.createElement;
-  const labels={connected:'已连接',connecting:'正在连接',disconnected:'连接已断开，正在重试','connection-error':'连接失败，正在重试','waiting-for-harness':'等待本机 DSH 就绪','needs-configuration':'等待填写配置',disabled:'已暂停','configuration-error':'配置有误'};
+  const labels={connected:'已连接',connecting:'正在连接',disconnected:'连接已断开，正在重试','authentication-failed':'电脑连接密钥与服务器不匹配，请勿填入手机访问密钥','connection-error':'连接失败，正在重试','waiting-for-harness':'等待本机 DSH 就绪','needs-configuration':'等待填写配置',disabled:'已暂停','configuration-error':'配置有误'};
   function StatusCard({readStatus,form}){
     const [value,setValue]=React.useState(null);
     const [snapshot,setSnapshot]=React.useState(()=>form.getSnapshot());

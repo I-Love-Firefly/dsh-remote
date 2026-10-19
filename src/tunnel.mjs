@@ -36,8 +36,14 @@ export function startTunnel(options) {
     if (closed) return;
     const ws = socket = new WebSocket(remote, { headers: { Authorization: `Bearer ${bridgeKey}`, 'X-DSH-Device': deviceId }, maxPayload: MAX_FRAME, handshakeTimeout: 15000 });
     ws.on('open', () => { attempt = 0; onStatus('connected'); });
-    ws.on('error', () => onStatus('connection-error'));
-    ws.on('close', () => { stopActive(); onStatus('disconnected'); schedule(); });
+    let failure;
+    ws.on('unexpected-response', (_req, res) => {
+      failure = res.statusCode === 401 ? 'authentication-failed' : 'connection-error';
+      res.resume();
+      ws.terminate();
+    });
+    ws.on('error', () => onStatus(failure ?? 'connection-error'));
+    ws.on('close', () => { stopActive(); onStatus(failure ?? 'disconnected'); schedule(); });
     ws.on('message', raw => {
       try { dispatch(JSON.parse(raw), ws, auth); } catch { ws.close(1008, 'Invalid frame'); }
     });

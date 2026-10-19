@@ -60,7 +60,7 @@ $env:DSH_REMOTE_CONFIG = 'C:\private\dsh-remote\computer.json'
 
 ## 手机
 
-安装 DSH Remote APK，设置 HTTPS 中转地址，输入手机访问密钥，点击在线电脑。也可直接使用手机浏览器访问同一地址。模型账号和命令执行环境复用电脑配置，手机无需运行 Node 或 Linux。
+安装 DSH Remote APK，设置 HTTPS 中转地址，输入手机访问密钥（最低 8 字符，必须与电脑连接密钥不同），点击在线电脑。也可直接使用手机浏览器访问同一地址。模型账号和命令执行环境复用电脑配置，手机无需运行 Node 或 Linux。服务器会话签名密钥仍至少需要 32 字符。
 
 电脑必须保持开机、联网、未休眠，并持续运行 Harness。断网时显示离线；插件按指数退避重连。手机退出应用不停止电脑上已由 Harness 接受的任务，但依赖手机参与的审批需要重新打开应用。
 
@@ -83,7 +83,7 @@ npm audit --omit=peer
 
 自动测试覆盖认证/CSRF、目标地址约束、设备隔离、HTTP 2 MiB 上传、流式响应、WebSocket 握手前消息排队、断线离线提示。另用隔离 DSH `0.2.1-rc.2` 验证完整界面与真实终端 `echo DSH_REMOTE_COMMAND_OK` 回显；第二个独立临时 profile 通过额外 patch 直接加载本插件源码，成功注册 `adapter-pc`。这属于隔离联调，没有向日常 DSH 安装插件或复用其账号。
 
-安卓 APK 已构建并通过 Lint；安卓 16 真机已安装、打开公网 HTTPS 页面并成功登录。部署后的 HTTPS 鉴权、真实 Harness HTML 与 `remoteAccess/follow` WebSocket baseline 已通过公网往返验证。尚未验证手机蜂窝网络切换和手机端命令执行。
+安卓 APK 已构建并通过 Lint；安卓 16 真机已成功登录、执行电脑端 PowerShell 命令并收到工具结果，连续三次关闭应用后重新连接成功。HTTPS 鉴权、真实 Harness HTML、`remoteAccess/follow` WebSocket baseline 以及三次隧道断线自动重连均已验证。
 
 公网联调可在独立测试 Harness 启动后运行：
 

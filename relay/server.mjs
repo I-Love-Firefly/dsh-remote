@@ -6,7 +6,8 @@ import { MAX_FRAME, MAX_BUFFER, MAX_BODY, validDevice, equal, send, encode, deco
 
 export function createRelay({ bridgeKey, mobileKey, publicUrl, sessionKey = randomBytes(32).toString('hex'), allowLocalTest = false }) {
   if (typeof bridgeKey !== 'string' || bridgeKey.length < 8) throw new Error('Bridge key must contain at least 8 characters');
-  for (const key of [mobileKey, sessionKey]) if (typeof key !== 'string' || key.length < 32) throw new Error('Mobile and session keys must contain at least 32 characters');
+  if (typeof mobileKey !== 'string' || mobileKey.length < 8) throw new Error('Mobile key must contain at least 8 characters');
+  if (typeof sessionKey !== 'string' || sessionKey.length < 32) throw new Error('Session key must contain at least 32 characters');
   if (equal(bridgeKey, mobileKey)) throw new Error('Bridge and mobile keys must be different');
   const root = new URL(publicUrl);
   if (root.protocol !== 'https:' && !(allowLocalTest && root.hostname === '127.0.0.1')) throw new Error('Public URL must use HTTPS');

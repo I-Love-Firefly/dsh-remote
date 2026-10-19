@@ -8,7 +8,7 @@ import { createRelay } from '../relay/server.mjs';
 import { startTunnel } from '../src/tunnel.mjs';
 import { safePath } from '../src/protocol.mjs';
 
-const bridgeKey='b'.repeat(8),mobileKey='m'.repeat(48);
+const bridgeKey='b'.repeat(8),mobileKey='m'.repeat(8);
 const listen=server=>new Promise(resolve=>server.listen(0,'127.0.0.1',()=>resolve(server.address().port)));
 const waitFor=async check=>{for(let i=0;i<150;i++){if(check())return;await new Promise(r=>setTimeout(r,20));}throw new Error('Timed out');};
 
@@ -41,6 +41,10 @@ test('authenticated relay: HTTP, streaming upload, streaming response, WebSocket
   const login=await call('/login',{method:'POST',headers:{origin},body:'key='+mobileKey});
   assert.equal(login.status,303);assert.match(login.headers.get('set-cookie'),/HttpOnly; SameSite=Strict/);
   const cookie=login.headers.get('set-cookie').split(';')[0];
+  const failedStatuses=[];
+  const rejectedTunnel=startTunnel({relayUrl:origin.replace('http:','ws:')+base,bridgeKey:'wrong-key',deviceId:'rejected-pc',getLocalUrl:()=>localOrigin+'/?token=fixture-token',allowInsecureLocalTest:true,onStatus:state=>failedStatuses.push(state)});
+  try { await waitFor(()=>failedStatuses.includes('authentication-failed'));assert.equal(relay.devices.has('rejected-pc'),false); }
+  finally { rejectedTunnel.close(); }
   tunnel=startTunnel({relayUrl:origin.replace('http:','ws:')+base,bridgeKey,deviceId:'pc',getLocalUrl:()=>localOrigin+'/?token=fixture-token',allowInsecureLocalTest:true});
   await waitFor(()=>relay.devices.has('pc'));
   const response=await call('/device/pc/a?q=1',{headers:{cookie,authorization:'Bearer mobile-should-not-leak'}});
@@ -64,6 +68,11 @@ test('authenticated relay: HTTP, streaming upload, streaming response, WebSocket
   const ws=new WebSocket(origin.replace('http:','ws:')+base+'/device/pc/api',{headers:{cookie,origin}});
   await once(ws,'open');const next=once(ws,'message');ws.send('immediate-before-upstream-ready');
   assert.equal(String((await next)[0]),'immediate-before-upstream-ready');ws.close();await once(ws,'close');
+  for(let i=0;i<3;i++){
+    const previous=relay.devices.get('pc');previous.terminate();
+    await waitFor(()=>relay.devices.has('pc')&&relay.devices.get('pc')!==previous);
+    assert.equal((await call('/device/pc/reconnected',{headers:{cookie}})).status,200);
+  }
   const badWS=new WebSocket(origin.replace('http:','ws:')+base+'/bridge',{headers:{Authorization:'Bearer wrong','X-DSH-Device':'intruder'}});
   const rejection=await new Promise(resolve=>{badWS.on('unexpected-response',(_req,res)=>{res.resume();resolve(res.statusCode);});badWS.on('error',()=>{});});assert.equal(rejection,401);
   tunnel.close();await waitFor(()=>!relay.devices.has('pc'));
@@ -73,6 +82,8 @@ test('authenticated relay: HTTP, streaming upload, streaming response, WebSocket
 test('configuration rejects insecure remote endpoints and unsafe target paths',()=>{
   assert.throws(()=>startTunnel({relayUrl:'wss://example.com',bridgeKey:'1234567',deviceId:'pc',getLocalUrl:()=>''}));
   assert.throws(()=>createRelay({bridgeKey:'1234567',mobileKey,publicUrl:'https://example.com/'}));
+  assert.throws(()=>createRelay({bridgeKey,mobileKey:'1234567',publicUrl:'https://example.com/'}));
+  assert.throws(()=>createRelay({bridgeKey,mobileKey,sessionKey:'s'.repeat(31),publicUrl:'https://example.com/'}));
   for(const path of ['//evil.test/','http://evil.test','/x\\y','/x\r\n'])assert.throws(()=>safePath(path));
   assert.throws(()=>startTunnel({relayUrl:'ws://example.com',bridgeKey,deviceId:'pc',getLocalUrl:()=>''}));
   assert.throws(()=>createRelay({bridgeKey,mobileKey:bridgeKey,publicUrl:'https://example.com/'}));
