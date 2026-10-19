@@ -1,6 +1,6 @@
 {
   "name": "dsh-remote",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "description": "Authenticated outbound relay for the DeepSeek Harness web interface",
   "type": "module",
   "license": "MIT",

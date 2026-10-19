@@ -68,7 +68,7 @@ $env:DSH_REMOTE_CONFIG = 'C:\private\dsh-remote\computer.json'
 
 - 手机密钥与电脑连接密钥分离；Cookie 使用 HttpOnly、SameSite=Strict，HTTPS 下带 Secure；登录有效期 7 天。
 - 登录限速，同源检查，拒绝未认证隧道，禁止 relay 消息指定任意本机主机地址。
-- HTTP 上传限制 32 MiB，实时 WebSocket 单帧当前限制 512 KiB。超限会拒绝或断开，适用于文本和普通操作；大附件应走 HTTP 上传。
+- HTTP 上传限制 32 MiB，WebSocket 单条消息限制 32 MiB。大型历史快照通过 32 KiB 中转分段传输，并在手机端保持原有消息边界；每路使用 1 MiB 确认窗口，避免慢速网络使整条隧道断开。单路待发送消息队列限制 32 MiB。
 - 一台电脑一个 device ID；已有 ID 不被新连接抢占。当前版本为同一所有者的设备设计，不提供多用户隔离、设备授权列表或独立审计日志。
 - 轮换手机密钥时同时更换 session key 并重启 relay，以撤销旧登录。退出登录只清除当前客户端 cookie。
 - 不支持访问电脑的 `localhost` 网页、远程桌面屏幕或独立于 Harness 的任意 shell 接口。

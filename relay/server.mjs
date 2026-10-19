@@ -3,6 +3,7 @@ import { randomBytes, randomUUID, createHmac } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import { WebSocketServer } from 'ws';
 import { MAX_FRAME, MAX_BUFFER, MAX_BODY, validDevice, equal, send, encode, decode, cleanHeaders } from '../src/protocol.mjs';
+import {MAX_WS_MESSAGE,createWsFlow,stopWsFlow,acknowledgeWs,queueWsMessage} from '../src/ws-flow.mjs';
 
 export function createRelay({ bridgeKey, mobileKey, publicUrl, sessionKey = randomBytes(32).toString('hex'), allowLocalTest = false }) {
   if (typeof bridgeKey !== 'string' || bridgeKey.length < 8) throw new Error('Bridge key must contain at least 8 characters');
@@ -14,7 +15,7 @@ export function createRelay({ bridgeKey, mobileKey, publicUrl, sessionKey = rand
   const base = root.pathname.replace(/\/$/, '');
   const devices = new Map(), pending = new Map(), failures = new Map();
   const bridges = new WebSocketServer({noServer:true,maxPayload:MAX_FRAME,perMessageDeflate:false});
-  const browsers = new WebSocketServer({noServer:true,maxPayload:512*1024,perMessageDeflate:false});
+  const browsers = new WebSocketServer({noServer:true,maxPayload:MAX_WS_MESSAGE,perMessageDeflate:false});
   const signature = data => createHmac('sha256',sessionKey).update(data).digest('base64url');
   const cookieName = 'dsh_remote_session';
   const cookiePath = base || '/';
@@ -26,7 +27,7 @@ export function createRelay({ bridgeKey, mobileKey, publicUrl, sessionKey = rand
   }
   const validOrigin = req => req.headers.origin === root.origin;
   const json = (res,status,value) => {res.writeHead(status,{'content-type':'application/json','cache-control':'no-store'});res.end(JSON.stringify(value));};
-  function done(id) { const entry=pending.get(id); if(entry) {clearTimeout(entry.timer);pending.delete(id);} return entry; }
+  function done(id) { const entry=pending.get(id); if(entry) {clearTimeout(entry.timer);stopWsFlow(entry.flowState);pending.delete(id);} return entry; }
   function cancel(id) { const entry=done(id); if(entry) try{send(entry.bridge,{t:entry.ws?'ws-close':'cancel',id});}catch{} }
   function attach(id, entry) {
     entry.timer=setTimeout(()=>{const old=done(id);if(old?.ws)old.ws.close(1011,'Request timed out');else if(old?.res){if(!old.res.headersSent)old.res.writeHead(504);old.res.end();}try{send(entry.bridge,{t:'cancel',id});}catch{}},120000);
@@ -99,8 +100,9 @@ export function createRelay({ bridgeKey, mobileKey, publicUrl, sessionKey = rand
             const f=JSON.parse(raw),entry=pending.get(f.id);
             if(!entry||entry.bridge!==ws)return;
             touch(entry);
-            if(f.t==='ws-ready'){entry.ready=true;clearTimeout(entry.timer);entry.timer=undefined;for(const frame of entry.queue??[])send(ws,frame);entry.queue=[];entry.queued=0;return;}
-            if(f.t==='ws-data'&&entry.ws){if(entry.ws.bufferedAmount>MAX_BUFFER)return entry.ws.close(1013);entry.ws.send(decode(f.data),{binary:!!f.binary});return;}
+            if(f.t==='ws-ready'){entry.ready=true;entry.fragment=f.fragment===true;clearTimeout(entry.timer);entry.timer=undefined;for(const message of entry.queue??[])queueWsMessage(ws,f.id,message.data,message.binary,entry.flowState,entry.fragment).catch(()=>entry.ws.close(1013));entry.queue=[];entry.queued=0;return;}
+            if(f.t==='ws-ack'){acknowledgeWs(entry.flowState,f.bytes);return;}
+            if(f.t==='ws-data'&&entry.ws){if(entry.ws.bufferedAmount>MAX_BUFFER)return entry.ws.close(1013);const chunk=decode(f.data);entry.ws.send(chunk,{binary:!!f.binary,fin:f.fin!==false},error=>{if(error)return entry.ws.terminate();if(f.flow&&chunk.length)try{send(ws,{t:'ws-ack',id:f.id,bytes:chunk.length});}catch{entry.ws.terminate();}});return;}
             if(f.t==='ws-close'&&entry.ws){done(f.id);entry.ws.close(1000);return;}
             if(f.t==='headers'&&entry.res){
               const headers=cleanHeaders(f.headers??{});
@@ -130,13 +132,12 @@ export function createRelay({ bridgeKey, mobileKey, publicUrl, sessionKey = rand
     if(!u.pathname.startsWith(base+'/device/')||!match)return reject('404 Not Found');
     const bridge=devices.get(match[1]);if(!bridge||pending.size>=128)return reject('503 Service Unavailable');
     browsers.handleUpgrade(req,socket,head,ws=>{
-      const id=randomUUID();attach(id,{bridge,ws,device:match[1],queue:[],queued:0,ready:false});
-      try{send(bridge,{t:'ws-open',id,path:match[2]+u.search,headers:cleanHeaders(req.headers),protocols:(req.headers['sec-websocket-protocol']??'').split(',').map(x=>x.trim()).filter(Boolean)});}catch{ws.close(1011);}
+      const id=randomUUID();attach(id,{bridge,ws,device:match[1],queue:[],queued:0,ready:false,flowState:createWsFlow()});
+      try{send(bridge,{t:'ws-open',id,path:match[2]+u.search,headers:cleanHeaders(req.headers),fragment:true,protocols:(req.headers['sec-websocket-protocol']??'').split(',').map(x=>x.trim()).filter(Boolean)});}catch{ws.close(1011);}
       ws.on('message',(data,binary)=>{
         const entry=pending.get(id);touch(entry);if(!entry)return;
-        const frame={t:'ws-data',id,data:encode(data),binary};
-        if(!entry.ready){entry.queued+=data.length;if(entry.queued>MAX_BUFFER)return ws.close(1013);entry.queue.push(frame);return;}
-        try{send(bridge,frame);}catch{ws.close(1011);}
+        if(!entry.ready){entry.queued+=data.length;if(entry.queued>MAX_WS_MESSAGE)return ws.close(1013);entry.queue.push({data,binary});return;}
+        queueWsMessage(bridge,id,data,binary,entry.flowState,entry.fragment).catch(()=>ws.close(1013));
       });
       ws.on('close',()=>cancel(id));ws.on('error',()=>{});
     });

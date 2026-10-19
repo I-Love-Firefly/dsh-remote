@@ -67,7 +67,21 @@ test('authenticated relay: HTTP, streaming upload, streaming response, WebSocket
   assert.equal(large.length,20*1024*1024);assert.equal(large.hash,createHash('sha256').update(Buffer.alloc(20*1024*1024,65)).digest('hex'));
   const ws=new WebSocket(origin.replace('http:','ws:')+base+'/device/pc/api',{headers:{cookie,origin}});
   await once(ws,'open');const next=once(ws,'message');ws.send('immediate-before-upstream-ready');
-  assert.equal(String((await next)[0]),'immediate-before-upstream-ready');ws.close();await once(ws,'close');
+  assert.equal(String((await next)[0]),'immediate-before-upstream-ready');
+  // Existing session snapshots exceed both the old 512 KiB message limit and the 8 MiB bridge buffer.
+  for(const binary of [false,true]){
+    const history=Buffer.from('历史 snapshot 🐋\n'.repeat(700000));
+    const echoed=once(ws,'message');
+    ws._socket.pause();setTimeout(()=>ws._socket.resume(),150);
+    ws.send(history,{binary});
+    const [actual,actualBinary]=await echoed;
+    assert.equal(actualBinary,binary);assert.equal(actual.length,history.length);
+    assert.equal(createHash('sha256').update(actual).digest('hex'),createHash('sha256').update(history).digest('hex'));
+  }
+  const ordered=[];ws.on('message',data=>ordered.push(String(data)));
+  for(const value of ['','after-history-1','after-history-2'])ws.send(value);
+  await waitFor(()=>ordered.length===3);assert.deepEqual(ordered,['','after-history-1','after-history-2']);
+  ws.close();await once(ws,'close');
   for(let i=0;i<3;i++){
     const previous=relay.devices.get('pc');previous.terminate();
     await waitFor(()=>relay.devices.has('pc')&&relay.devices.get('pc')!==previous);

@@ -3,6 +3,7 @@ import http from 'node:http';
 import https from 'node:https';
 import { MAX_FRAME, MAX_BODY, validDevice, safePath, cleanHeaders, send, encode, decode } from './protocol.mjs';
 import {remoteAssetPolicy} from './asset-policy.mjs';
+import {MAX_WS_MESSAGE,createWsFlow,stopWsFlow,acknowledgeWs,queueWsMessage} from './ws-flow.mjs';
 
 /** Only connects to the local Harness; relay messages cannot choose a host. */
 export function startTunnel(options) {
@@ -14,7 +15,7 @@ export function startTunnel(options) {
   remote.search = ''; remote.hash = '';
   let closed = false, socket, retry, attempt = 0;
   const active = new Map();
-  const stopActive = () => { for (const value of active.values()) {value.cancelled=true;value.wakeCredit?.();value.destroy?.();} active.clear(); };
+  const stopActive = () => { for (const value of active.values()) {value.cancelled=true;value.wakeCredit?.();stopWsFlow(value.relayFlow);value.destroy?.();} active.clear(); };
   async function localAuth() {
     const url = new URL(await getLocalUrl());
     if (!['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname) || !['http:', 'https:'].includes(url.protocol)) throw new Error('Harness target must be loopback HTTP(S)');
@@ -54,7 +55,8 @@ export function startTunnel(options) {
   function dispatch(f, ws, auth) {
     if (typeof f.id !== 'string') throw new Error('Missing request ID');
     if (f.t === 'cancel') { const value=active.get(f.id);if(value){value.cancelled=true;value.wakeCredit?.();value.destroy?.();}active.delete(f.id);return; }
-    if (f.t === 'ws-data') { const upstream = active.get(f.id); if (upstream?.readyState === 1) upstream.send(decode(f.data), { binary: !!f.binary }); return; }
+    if (f.t === 'ws-ack') { acknowledgeWs(active.get(f.id)?.relayFlow,f.bytes);return; }
+    if (f.t === 'ws-data') { const upstream = active.get(f.id); if (upstream?.readyState === 1) {const chunk=decode(f.data);upstream.send(chunk, { binary: !!f.binary,fin:f.fin!==false },error=>{if(error)return upstream.terminate();if(f.flow&&chunk.length)try{send(ws,{t:'ws-ack',id:f.id,bytes:chunk.length});}catch{upstream.terminate();}});} return; }
     if (f.t === 'ws-close') { active.get(f.id)?.close?.(1000); active.delete(f.id); return; }
     if (f.t === 'http-ack') {const req=active.get(f.id);if(req&&Number.isInteger(f.bytes)&&f.bytes>0&&f.bytes<=2*1024*1024){req.unacknowledged=Math.max(0,(req.unacknowledged??0)-f.bytes);req.wakeCredit?.();req.wakeCredit=undefined;}return;}
     if (f.t === 'http-body') { const req=active.get(f.id); if(!req) return; const chunk=decode(f.data); req.received=(req.received??0)+chunk.length; if(req.received>MAX_BODY)throw new Error('Upload too large'); req.write(chunk); return; }
@@ -70,11 +72,12 @@ export function startTunnel(options) {
     if(policy.tail){delete headers['if-none-match'];delete headers['if-modified-since'];}
     if (f.t === 'ws-open') {
       target.protocol = target.protocol === 'https:' ? 'wss:' : 'ws:';
-      const upstream = new WebSocket(target, f.protocols?.length ? f.protocols : undefined, { headers, maxPayload: 512*1024, handshakeTimeout: 10000 });
+      const upstream = new WebSocket(target, f.protocols?.length ? f.protocols : undefined, { headers, maxPayload: MAX_WS_MESSAGE, handshakeTimeout: 10000 });
+      upstream.relayFlow=createWsFlow();
       upstream.destroy = () => upstream.terminate(); active.set(f.id, upstream);
-      upstream.on('open', () => send(ws, { t: 'ws-ready', id: f.id }));
-      upstream.on('message', (data, binary) => { try { send(ws, {t:'ws-data', id:f.id, data:encode(data), binary}); } catch {upstream.terminate();} });
-      upstream.on('close', () => { active.delete(f.id); try { send(ws, {t:'ws-close',id:f.id}); } catch {} });
+      upstream.on('open', () => send(ws, { t: 'ws-ready', id: f.id,fragment:true }));
+      upstream.on('message', (data, binary) => {queueWsMessage(ws,f.id,data,binary,upstream.relayFlow,f.fragment===true).catch(()=>upstream.terminate());});
+      upstream.on('close', () => { stopWsFlow(upstream.relayFlow);active.delete(f.id); try { send(ws, {t:'ws-close',id:f.id}); } catch {} });
       upstream.on('error', () => upstream.terminate()); return;
     }
     if (typeof f.method !== 'string') throw new Error('Invalid method');
